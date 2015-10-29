@@ -56,9 +56,14 @@ Global Variables
 
 int state = 0; // Used to control ADC switching
 char buffer[PACKET_LENGTH] = {0,0,0,0,0,0}; // Wifi output
-volatile int Kp = 0; // Proportional Gain
-volatile int Ki = 0; // Integral Gain
-volatile int Kd = 0; // Derrivative Gain
+int Kp = 0; // Proportional Gain
+int Ki = 0; // Integral Gain
+int Kd = 0; // Derivative Gain
+
+int Kp_test = 0; // Proportional Gain
+int Ki_test = 0; // Integral Gain
+int Kd_test = 0; // Derivative Gain
+int sum = 0;
 
 /************************************************************
 Main Loop
@@ -72,13 +77,24 @@ int main(void)
 	/* Initializations */
 	init();
 	adc_start();
-	//usb_enable();
+	usb_enable();
 
 	/* Confirm successful initialization(s) */
 	m_green(ON);
 	
     while (1) 
-    {}
+    {
+		sum = Kd_test+Ki_test+Kp_test;
+		//sum = Kd+Ki+Kp;
+		if (Kp_test<1000)
+		{
+			m_red(OFF);
+		}
+		else
+		{
+			m_red(ON);
+		}
+	}
 }
 
 /************************************************************
@@ -172,22 +188,26 @@ void adc_switch(void)
 /* Send Wireless Data */
 void wireless_send(void)
 {
-	buffer [0] = *&Kp;
-	buffer [2] = *&Ki;
-	buffer [4] = *&Kd;
-	m_rf_send(TXADDRESS,buffer,PACKET_LENGTH); // Send RF Signal
+	buffer[0] = *&Kp;
+	buffer[2] = *&Ki;
+	buffer[4] = *&Kd;
+	//m_rf_send(TXADDRESS,buffer,PACKET_LENGTH); // Send RF Signal
 
-	Kp = *(int*)&buffer[0];
-	Ki = *(int*)&buffer[2];
-	Kd = *(int*)&buffer[4];
+	
+	Kp_test = *(int*)&buffer[0];
+	Ki_test = *(int*)&buffer[2];
+	Kd_test = *(int*)&buffer[4];
 	
 	m_usb_tx_string("Kp= ");
-	m_usb_tx_int(Kp);
+	m_usb_tx_int(Kp_test);
 	m_usb_tx_string("     Ki= ");
-	m_usb_tx_int(Ki);
+	m_usb_tx_int(Ki_test);
 	m_usb_tx_string("     Kd= ");
-	m_usb_tx_int(Kd);
+	m_usb_tx_int(Kd_test);
+	m_usb_tx_string("     buffer= ");
+	m_usb_tx_int(Kd_test);
 	m_usb_tx_string("\n");	
+
 }
 
 /************************************************************
@@ -195,7 +215,6 @@ Interrupts
 ************************************************************/
 
 ISR(ADC_vect){
-	OCR1A = 0x7A76/1023.0*ADC;
 	adc_switch();
 }
 
