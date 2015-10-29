@@ -15,7 +15,7 @@ Header Information
 ==================================================================
 ### INTERNAL README: ADD TO EVERYTIME BEFORE SENDING TO GITHUB ###
 
-Modified by Bahram on 10/29/15 to transmit ADC data via RF
+Modified by Bahram on 10/29/15 to recieve ADC data via RF
 
 ==================================================================
 *****************************************************************/
@@ -37,7 +37,7 @@ Definitions
 ************************************************************/
 
 #define CHANNEL 7
-#define TXADDRESS 0x7C
+#define RXADDRESS 0x7C
 #define PACKET_LENGTH 6
 
 /************************************************************
@@ -45,10 +45,9 @@ Prototype Functions
 ************************************************************/
 
 void init(void); // Initialize system clock & pins
-void adc_start(void); // Initialize ADC subsystem
 void usb_enable(void); // Enable USB
-void adc_switch(void); // Switch ADC read pin
-void wireless_send(void); // Send data to slave
+void wireless_enable(void); // Initialize the wireless system
+void wireless_recieve(void); // Send data to slave
 
 /************************************************************
 Global Variables
@@ -71,8 +70,8 @@ int main(void)
 
 	/* Initializations */
 	init();
-	adc_start();
-	//usb_enable();
+	usb_enable();
+	wireless_enable();
 
 	/* Confirm successful initialization(s) */
 	m_green(ON);
@@ -87,42 +86,9 @@ Subroutines and Functions
 
 /* Initialization of Pins and System Clock */
 void init(void){
-	
-	m_clockdivide(4); // Set to 1 MHz
-	
-	m_bus_init(); // Enable mBUS
-	
-}
-
-
-/* Setup ADC */
-void adc_start(void){
-	
-	clear(ADMUX,REFS1); // Set reference voltage to Vcc
-	set(ADMUX,REFS0);
-	
-	clear(ADCSRA,ADPS2); // Set prescaler to /8
-	set(ADCSRA,ADPS1);
-	set(ADCSRA,ADPS0);
-	
-	set(DIDR2,ADC8D); // Disable Digital input to: ADC8
-	set(DIDR2,ADC9D); // ADC9
-	set(DIDR2,ADC10D); // ADC10
+	m_clockdivide(3); // Set to 2 MHz
 	
 	sei(); // Enable global interrupts
-	
-	set(ADCSRA,ADIE); // Enable interrupt for when conversion is finished
-	
-	clear(ADCSRA,ADATE); // Turn off 'free-running' mode
-	
-	set(ADCSRB,MUX5); // Select ADC0 at pin D4
-	clear(ADMUX,MUX2);
-	clear(ADMUX,MUX1);
-	clear(ADMUX,MUX0);
-	
-	set(ADCSRA,ADEN); // Enable ADC subsystem
-	
-	set(ADCSRA,ADSC); // Begin first conversion
 }
 
 /* Setup USB */
@@ -132,51 +98,17 @@ void usb_enable(void)
 	while(!m_usb_isconnected());
 }
 
-/* Control ADC Pin Switching */
-void adc_switch(void)
+/* Initialize the Wireless System */
+void wireless_enable(void)
 {
-	clear(ADCSRA,ADEN); // Disable ADC subsystem
-	
-	switch(state){
-		case 0:
-			state = 1;
-			set(ADCSRB,MUX5); // Select ADC0 at pin D6
-			clear(ADMUX,MUX2);
-			clear(ADMUX,MUX1);
-			set(ADMUX,MUX0);
-			Kp = ADC;
-			break;
-		case 1:
-			state = 2;
-			set(ADCSRB,MUX5); // Select ADC0 at pin D7
-			clear(ADMUX,MUX2);
-			set(ADMUX,MUX1);
-			clear(ADMUX,MUX0);
-			Ki = ADC;
-			break;
-		case 2:
-			state = 0;
-			set(ADCSRB,MUX5); // Select ADC0 at pin D4
-			clear(ADMUX,MUX2);
-			clear(ADMUX,MUX1);
-			clear(ADMUX,MUX0);
-			Kd = ADC;
-			wireless_send();
-			break;
-	}
-	
-	set(ADCSRA,ADEN); // Enable ADC subsystem
-	set(ADCSRA,ADSC); // Begin new conversion
+	m_bus_init(); // Enable mBUS
+	m_rf_open(CHANNEL,RXADDRESS,PACKET_LENGTH); // Configure mRF
 }
 
 /* Send Wireless Data */
-void wireless_send(void)
+void wireless_recieve(void)
 {
-	buffer [0] = *&Kp;
-	buffer [2] = *&Ki;
-	buffer [4] = *&Kd;
-	m_rf_send(TXADDRESS,buffer,PACKET_LENGTH); // Send RF Signal
-
+	m_rf_read(buffer,PACKET_LENGTH); // Read RF Signal
 	Kp = *(int*)&buffer[0];
 	Ki = *(int*)&buffer[2];
 	Kd = *(int*)&buffer[4];
@@ -187,16 +119,15 @@ void wireless_send(void)
 	m_usb_tx_int(Ki);
 	m_usb_tx_string("     Kd= ");
 	m_usb_tx_int(Kd);
-	m_usb_tx_string("\n");	
+	m_usb_tx_string("\n");
 }
 
 /************************************************************
 Interrupts
 ************************************************************/
 
-ISR(ADC_vect){
-	OCR1A = 0x7A76/1023.0*ADC;
-	adc_switch();
+ISR(INT2_vect){
+	wireless_recieve();
 }
 
 /************************************************************
