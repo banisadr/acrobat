@@ -36,6 +36,10 @@ Included Files & Libraries
 Definitions
 ************************************************************/
 
+#define CHANNEL 7
+#define TXADDRESS 0x7C
+#define PACKET_LENGTH 6
+
 /************************************************************
 Prototype Functions
 ************************************************************/
@@ -44,12 +48,14 @@ void init(void); // Initialize system clock & pins
 void adc_start(void); // Initialize ADC subsystem
 void usb_enable(void); // Enable USB
 void adc_switch(void); // Switch ADC read pin
+void wireless_send(void); // Send data to slave
 
 /************************************************************
 Global Variables
 ************************************************************/
 
 int state = 0; // Used to control ADC switching
+char buffer[PACKET_LENGTH] = {0,0,0,0,0,0}; // Wifi output
 volatile int Kp = 0; // Proportional Gain
 volatile int Ki = 0; // Integral Gain
 volatile int Kd = 0; // Derrivative Gain
@@ -66,7 +72,7 @@ int main(void)
 	/* Initializations */
 	init();
 	adc_start();
-	usb_enable();
+	//usb_enable();
 
 	/* Confirm successful initialization(s) */
 	m_green(ON);
@@ -83,6 +89,8 @@ Initialization of Subsystem Components
 void init(void){
 	
 	m_clockdivide(4); // Set to 1 MHz
+	
+	m_bus_init(); // Enable mBUS
 	
 }
 
@@ -136,6 +144,7 @@ void adc_switch(void)
 			clear(ADMUX,MUX2);
 			clear(ADMUX,MUX1);
 			set(ADMUX,MUX0);
+			Kp = ADC;
 			break;
 		case 1:
 			state = 2;
@@ -143,6 +152,7 @@ void adc_switch(void)
 			clear(ADMUX,MUX2);
 			set(ADMUX,MUX1);
 			clear(ADMUX,MUX0);
+			Ki = ADC;
 			break;
 		case 2:
 			state = 0;
@@ -150,11 +160,22 @@ void adc_switch(void)
 			clear(ADMUX,MUX2);
 			clear(ADMUX,MUX1);
 			clear(ADMUX,MUX0);
+			Kd = ADC;
+			wireless_send();
 			break;
 	}
 	
 	set(ADCSRA,ADEN); // Enable ADC subsystem
 	set(ADCSRA,ADSC); // Begin new conversion
+}
+
+/* Send Wireless Data */
+void wireless_send(void)
+{
+	buffer [0] = *&Kp;
+	buffer [2] = *&Ki;
+	buffer [4] = *&Kd;
+	m_rf_send(TXADDRESS,buffer,PACKET_LENGTH); // Send RF Signal	
 }
 
 /************************************************************
