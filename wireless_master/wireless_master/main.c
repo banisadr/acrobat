@@ -38,6 +38,7 @@ Definitions
 
 #define CHANNEL 7
 #define TXADDRESS 0x7C
+#define RXADDRESS 0x6C
 #define PACKET_LENGTH 3
 
 /************************************************************
@@ -60,11 +61,6 @@ char Kp = 0; // Proportional Gain
 char Ki = 0; // Integral Gain
 char Kd = 0; // Derivative Gain
 
-char Kp_test = 0; // Proportional Gain
-char Ki_test = 0; // Integral Gain
-char Kd_test = 0; // Derivative Gain
-int sum = 0;
-
 /************************************************************
 Main Loop
 ************************************************************/
@@ -77,24 +73,13 @@ int main(void)
 	/* Initializations */
 	init();
 	adc_start();
-	usb_enable();
+	//usb_enable();
 
 	/* Confirm successful initialization(s) */
 	m_green(ON);
 	
     while (1) 
-    {
-		sum = Kd_test+Ki_test+Kp_test;
-		//sum = Kd+Ki+Kp;
-		if (Kp_test<600)
-		{
-			m_red(OFF);
-		}
-		else
-		{
-			m_red(ON);
-		}
-	}
+    {}
 }
 
 /************************************************************
@@ -107,6 +92,9 @@ void init(void){
 	m_clockdivide(4); // Set to 1 MHz
 	
 	m_bus_init(); // Enable mBUS
+	
+	m_rf_open(CHANNEL,RXADDRESS,PACKET_LENGTH); // Configure mRF
+	
 	
 }
 
@@ -191,23 +179,8 @@ void wireless_send(void)
 	buffer[0] = Kp;
 	buffer[1] = Ki;
 	buffer[2] = Kd;
-	//m_rf_send(TXADDRESS,buffer,PACKET_LENGTH); // Send RF Signal
-
 	
-	Kp_test = buffer[0];
-	Ki_test = buffer[1];
-	Kd_test = buffer[2];
-	
-	m_usb_tx_string("Kp= ");
-	m_usb_tx_int(Kp_test);
-	m_usb_tx_string("     Ki= ");
-	m_usb_tx_int(Ki_test);
-	m_usb_tx_string("     Kd= ");
-	m_usb_tx_int(Kd_test);
-	m_usb_tx_string("     buffer= ");
-	m_usb_tx_int(Kd_test);
-	m_usb_tx_string("\n");	
-
+	m_rf_send(TXADDRESS,buffer,PACKET_LENGTH); // Send RF Signal
 }
 
 /************************************************************

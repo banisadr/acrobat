@@ -38,7 +38,7 @@ Definitions
 
 #define CHANNEL 7
 #define RXADDRESS 0x7C
-#define PACKET_LENGTH 6
+#define PACKET_LENGTH 3
 
 /************************************************************
 Prototype Functions
@@ -54,10 +54,10 @@ Global Variables
 ************************************************************/
 
 int state = 0; // Used to control ADC switching
-char buffer[PACKET_LENGTH] = {0,0,0,0,0,0}; // Wifi output
-volatile int Kp = 0; // Proportional Gain
-volatile int Ki = 0; // Integral Gain
-volatile int Kd = 0; // Derrivative Gain
+char buffer[PACKET_LENGTH] = {0,0,0}; // Wifi output
+char Kp = 0; // Proportional Gain
+char Ki = 0; // Integral Gain
+char Kd = 0; // Derivative Gain
 
 /************************************************************
 Main Loop
@@ -109,9 +109,9 @@ void wireless_enable(void)
 void wireless_recieve(void)
 {
 	m_rf_read(buffer,PACKET_LENGTH); // Read RF Signal
-	Kp = *(int*)&buffer[0];
-	Ki = *(int*)&buffer[2];
-	Kd = *(int*)&buffer[4];
+	Kp = buffer[0];
+	Ki = buffer[1];
+	Kd = buffer[2];
 	
 	m_usb_tx_string("Kp= ");
 	m_usb_tx_int(Kp);
