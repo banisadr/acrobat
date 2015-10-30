@@ -25,7 +25,7 @@ Modified by Bahram on 10/30/15 to integrate motor control
 Included Files & Libraries
 ************************************************************/
 #include <avr/io.h>
-#include <m_general.h>
+#include "m_general.h"
 #include "m_bus.h"
 #include "m_rf.h"
 #include "m_usb.h"
@@ -39,19 +39,17 @@ Definitions
 #define CLOCK_DIVIDE 3
 #define CLOCK 2000000
 #define TIM3_PRESCALE 1
-#define TIMESTEP 0.01
+#define TIMESTEP 0.001
 
 /* Filter Values */
 #define ALPHA_LOW 0.95
-#define ALPHA_HIGH 0.5
+#define ALPHA_HIGH 0.1
 #define AX_OFFSET -136
 #define AZ_OFFSET 39
 #define GY_OFFSET -121
 
 /* Motor Driver Values */
-#define PWM_FREQ 400
-#define DUTY_CYCLE 0.4
-#define INVERT 1 
+#define PWM_FREQ 400 
 
 /* Other */
 #define RAD2DEG 57.30
@@ -64,11 +62,11 @@ Prototype Functions
 void init(void); //Setup I/O, clockspeed, IMU, Interrupts
 void print_axazgy(void); //Print values to usb
 void print_all(void); //Print all 6 IMU values
-void print_angle(void); //Print angle
+void print_angle(int angle); //Print angle
 void usb_enable(void); //Setup USB
 void timer1_init(void); //Setup timer1 for motor PWM control
 void timer3_init(void); //Setup timer3 for fixed timestep calculations
-void get_angle(void); //Get IMU data, filter, and update angle
+int get_angle(void); //Get IMU data, filter, and update angle
 int lowpass(float alpha, int previous_output, int reading); //Lowpass filter
 int highpass(float alpha, int previous_output, int previous_reading, int reading); //Highpass filter
 
@@ -83,6 +81,9 @@ int data[9]={0}; // IMU data buffer
 int ax = 0;
 int az = 0;
 int gy = 0;
+
+float duty_cycle = 0.4;
+int invert = 1;
 
 
 /************************************************************
@@ -99,6 +100,9 @@ int main(void)
 	timer1_init();
 	timer3_init();
 	int gy_previous_reading = 0;
+	int angleFast = 0;
+	int angleSlow;
+	int angle=0;
 
 	/* Confirm successful initialization(s) */
 	m_green(ON);
@@ -106,8 +110,11 @@ int main(void)
 	/* Run */
 	while (1){
 
-		if(INVERT){
+		if(invert){
 			set(PORTC,6);
+		}
+		else{
+			clear(PORTC,6);
 		}
 		if (m_imu_raw(data))
 		{
@@ -115,25 +122,37 @@ int main(void)
 			m_red(OFF);
 			
 			
-			ax = lowpass(0.85,ax,data[0])+AX_OFFSET;
-			az = lowpass(0.85,az,data[2])+AZ_OFFSET;
+			ax = lowpass(0.7,ax,data[0])+AX_OFFSET;
+			az = lowpass(0.7,az,data[2])+AZ_OFFSET;
 			gy = lowpass(ALPHA_LOW,gy,data[4])+GY_OFFSET;
 			gy = highpass(ALPHA_HIGH,gy,gy_previous_reading,data[4]);
-			gy_previous_reading = data[4];
-			
-			int angle = ((float)ax*RAD2DEG)/sqrt(((float)ax*ax+(float)az*az));
+			gy_previous_reading = data[4];	
 			
 			if (check(TIFR3,OCF3A)){	//check if timestep has completed 
-				angle += gy*TIMESTEP;	//add thetadot*timestep to angle 
+				angleSlow = ((float)ax*RAD2DEG)/sqrt(((float)ax*ax+(float)az*az));
+				angleFast += gy*TIMESTEP;	//add thetadot*timestep to angle 
+				angle = -angleSlow + angleFast;
 				set(TIFR3,OCF3A);		//reset flag 
 			}
 			
+			print_angle(angle);
 		}
 		else
 		{
 			m_green(OFF);
 			m_red(ON);
 		}
+		
+		duty_cycle = abs(angle)/90.0;
+		if (angle<0)
+		{
+			invert = 1;
+		} 
+		else
+		{
+			invert = 0;
+		}
+		
 	}
 }
 
@@ -186,8 +205,8 @@ void timer1_init(void)
 	set(TCCR1A,COM1B1);		//clear at OCR1B, set at OCR1A
 	clear(TCCR1A,COM1B0);
 
-	OCR1A = CLOCK_SPEED/PWM_FREQ;
-	OCR1B = (float)OCR1A*DUTY_CYCLE;
+	OCR1A = CLOCK/PWM_FREQ;
+	OCR1B = (float)OCR1A*duty_cycle;
 }
 
 /* Timer3 Initialization for fixed timestep calculations */
@@ -249,7 +268,7 @@ void print_all(void)//Print all 6 IMU values
 	m_usb_tx_string("\n");
 }
 
-void print_angle(void)//Print angle
+void print_angle(int angle)//Print angle
 {
 	m_usb_tx_string("angle= ");
 	m_usb_tx_int(angle);
