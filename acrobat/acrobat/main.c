@@ -125,7 +125,7 @@ int main(void)
 
 	/* Initializations */
 	init();
-	usb_enable();
+	//usb_enable();
 	wireless_enable();
 	timer1_init();
 	timer3_init();
