@@ -57,6 +57,11 @@ Definitions
 #define Ki 1.0
 #define Kd 1.0
 
+/* Wireless Communication Values */
+#define CHANNEL 7
+#define RXADDRESS 0x7C
+#define PACKET_LENGTH 3
+
 /* Other */
 #define RAD2DEG 57.30
 
@@ -69,6 +74,8 @@ void print_axazgy(void); //Print values to usb
 void print_all(void); //Print all 6 IMU values
 void print_angle(int angle); //Print angle
 void usb_enable(void); //Setup USB
+void wireless_enable(void); // Initialize the wireless system
+void wireless_recieve(void); // Send data to slave
 void timer1_init(void); //Setup timer1 for motor PWM control
 void timer3_init(void); //Setup timer3 for fixed timestep calculations
 void update_angle(void); //Get IMU data, filter, update angle, update control
@@ -102,6 +109,12 @@ int angle=0;
 int previous_error = 0;
 float integral = 0.0;
 
+/* Wireless Communciation Values */
+char buffer[PACKET_LENGTH] = {0,0,0}; // Wifi output
+char Kp_adjust = 0; // Proportional Gain
+char Ki_adjust = 0; // Integral Gain
+char Kd_adjust = 0; // Derivative Gain
+
 /************************************************************
 Main Loop
 ************************************************************/
@@ -113,6 +126,7 @@ int main(void)
 	/* Initializations */
 	init();
 	usb_enable();
+	wireless_enable();
 	timer1_init();
 	timer3_init();
 
@@ -158,6 +172,33 @@ void usb_enable(void)
 	while(!m_usb_isconnected());
 }
 
+/* Initialize the Wireless System */
+void wireless_enable(void)
+{
+	sei();
+	m_bus_init(); // Enable mBUS
+	m_rf_open(CHANNEL,RXADDRESS,PACKET_LENGTH); // Configure mRF
+}
+
+/* Recieve Wireless Data */
+void wireless_recieve(void)
+{
+	m_rf_read(buffer,PACKET_LENGTH); // Read RF Signal
+	Kp_adjust = buffer[0];
+	Ki_adjust = buffer[1];
+	Kd_adjust = buffer[2];
+	
+	/*	
+	m_usb_tx_string("Kp= ");
+	m_usb_tx_int(Kp);
+	m_usb_tx_string("     Ki= ");
+	m_usb_tx_int(Ki);
+	m_usb_tx_string("     Kd= ");
+	m_usb_tx_int(Kd);
+	m_usb_tx_string("\n");
+	*/
+}
+
 /* Timer1 Initialization for PWM Motor Control */
 void timer1_init(void)
 {
@@ -191,8 +232,6 @@ void timer3_init(void)
 	clear(TCCR3A,WGM30);
 	
 	OCR3A = TIMESTEP*(CLOCK/TIM3_PRESCALE); // initalize OCR3A or duration
-	
-	//set(TIMSK3,OCIE3A); // set interrupt when OCR3A is reached
 }
 
 
@@ -245,7 +284,7 @@ void run_control_loop(void)
 	int error = SETPOINT - angle;
 	integral += error*TIMESTEP;
 	float derivative = (error - previous_error)/TIMESTEP;
-	float output = Kp*error+Ki*integral+Kd*derivative;
+	float output = (Kp_adjust/255.0)*Kp*error + (Ki_adjust/255.0)*Ki*integral + (Kd_adjust/255.0)*Kd*derivative;
 	previous_error = error;
 	
 	duty_cycle = abs(output)/(45.0*Kp);
@@ -294,7 +333,9 @@ void print_angle(int angle)//Print angle
 Interrupts
 ************************************************************/
 
-
+ISR(INT2_vect){
+	wireless_recieve();
+}
 
 /************************************************************
 End of Program

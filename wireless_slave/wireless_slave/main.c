@@ -53,7 +53,6 @@ void wireless_recieve(void); // Send data to slave
 Global Variables
 ************************************************************/
 
-int state = 0; // Used to control ADC switching
 char buffer[PACKET_LENGTH] = {0,0,0}; // Wifi output
 char Kp = 0; // Proportional Gain
 char Ki = 0; // Integral Gain
@@ -105,7 +104,7 @@ void wireless_enable(void)
 	m_rf_open(CHANNEL,RXADDRESS,PACKET_LENGTH); // Configure mRF
 }
 
-/* Send Wireless Data */
+/* Recieve Wireless Data */
 void wireless_recieve(void)
 {
 	m_rf_read(buffer,PACKET_LENGTH); // Read RF Signal
