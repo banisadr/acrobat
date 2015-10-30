@@ -51,9 +51,14 @@ Definitions
 /* Motor Driver Values */
 #define PWM_FREQ 400 
 
+/* PID Controller Values */
+#define SETPOINT 0
+#define Kp 1.0
+#define Ki 1.0
+#define Kd 1.0
+
 /* Other */
 #define RAD2DEG 57.30
-#define F_CPU 2700000000
 
 /************************************************************
 Prototype Functions
@@ -66,7 +71,8 @@ void print_angle(int angle); //Print angle
 void usb_enable(void); //Setup USB
 void timer1_init(void); //Setup timer1 for motor PWM control
 void timer3_init(void); //Setup timer3 for fixed timestep calculations
-int get_angle(void); //Get IMU data, filter, and update angle
+void update_angle(void); //Get IMU data, filter, update angle, update control
+void run_control_loop(void); //Run Control Loop
 int lowpass(float alpha, int previous_output, int reading); //Lowpass filter
 int highpass(float alpha, int previous_output, int previous_reading, int reading); //Highpass filter
 
@@ -75,6 +81,7 @@ int highpass(float alpha, int previous_output, int previous_reading, int reading
 Global Variables
 ************************************************************/
 
+/* IMU Shenanigans */
 unsigned char accel_scale = 1; // +/-1g
 unsigned char gyro_scale = 1;// +/- 125 degrees
 int data[9]={0}; // IMU data buffer
@@ -82,9 +89,18 @@ int ax = 0;
 int az = 0;
 int gy = 0;
 
+/* Motor Control */
 float duty_cycle = 0.4;
-int invert = 1;
 
+/* Angle Stuff */
+int gy_previous_reading = 0;
+int angleFast = 0;
+int angleSlow;
+int angle=0;
+
+/* PID Controler Values */
+int previous_error = 0;
+float integral = 0.0;
 
 /************************************************************
 Main Loop
@@ -99,60 +115,13 @@ int main(void)
 	usb_enable();
 	timer1_init();
 	timer3_init();
-	int gy_previous_reading = 0;
-	int angleFast = 0;
-	int angleSlow;
-	int angle=0;
 
 	/* Confirm successful initialization(s) */
 	m_green(ON);
 
 	/* Run */
 	while (1){
-
-		if(invert){
-			set(PORTC,6);
-		}
-		else{
-			clear(PORTC,6);
-		}
-		if (m_imu_raw(data))
-		{
-			m_green(ON);
-			m_red(OFF);
-			
-			
-			ax = lowpass(0.7,ax,data[0])+AX_OFFSET;
-			az = lowpass(0.7,az,data[2])+AZ_OFFSET;
-			gy = lowpass(ALPHA_LOW,gy,data[4])+GY_OFFSET;
-			gy = highpass(ALPHA_HIGH,gy,gy_previous_reading,data[4]);
-			gy_previous_reading = data[4];	
-			
-			if (check(TIFR3,OCF3A)){	//check if timestep has completed 
-				angleSlow = ((float)ax*RAD2DEG)/sqrt(((float)ax*ax+(float)az*az));
-				angleFast += gy*TIMESTEP;	//add thetadot*timestep to angle 
-				angle = -angleSlow + angleFast;
-				set(TIFR3,OCF3A);		//reset flag 
-			}
-			
-			print_angle(angle);
-		}
-		else
-		{
-			m_green(OFF);
-			m_red(ON);
-		}
-		
-		duty_cycle = abs(angle)/90.0;
-		if (angle<0)
-		{
-			invert = 1;
-		} 
-		else
-		{
-			invert = 0;
-		}
-		
+		update_angle();
 	}
 }
 
@@ -169,13 +138,13 @@ void init(void){
 	clear(DDRD,0); // D0
 	clear(DDRD,1); // D1
 	clear(DDRD,2); // D2
-	clear(PORTC,6);	//start with both pins low 
-	//clear(PORTC,7); 
 	
 	//Set to Output
 	set(DDRB,6); // B6
 	set(DDRC,6);	//enable digital output on pin C6 (invert state)
-	//set(DDRC,7);	//enable digital output on pin C7 
+	
+	//Set pin low
+	clear(PORTC,6);	//start with both pins low 
 	
 	while(!m_imu_init(accel_scale,gyro_scale)); //Initialize IMU
 	
@@ -237,6 +206,52 @@ int lowpass(float alpha, int previous_output, int reading)
 int highpass(float alpha, int previous_output, int previous_reading, int reading)
 {
 	return (int)((float)previous_output*alpha + alpha*(float)(reading-previous_reading));
+}
+
+/* Get IMU data, filter, update angle, update control */
+void update_angle(void)
+{
+	if (m_imu_raw(data))
+	{
+		m_green(ON);
+		m_red(OFF);		
+		
+		ax = lowpass(0.7,ax,data[0])+AX_OFFSET;
+		az = lowpass(0.7,az,data[2])+AZ_OFFSET;
+		gy = lowpass(ALPHA_LOW,gy,data[4])+GY_OFFSET;
+		gy = highpass(ALPHA_HIGH,gy,gy_previous_reading,data[4]);
+		gy_previous_reading = data[4];
+		
+		if (check(TIFR3,OCF3A)){	//check if timestep has completed
+			angleSlow = ((float)ax*RAD2DEG)/sqrt(((float)ax*ax+(float)az*az));
+			angleFast += gy*TIMESTEP;	//add thetadot*timestep to angle
+			angle = -angleSlow + angleFast;
+			set(TIFR3,OCF3A);		//reset flag
+			run_control_loop(); // Update control
+		}
+		
+		print_angle(angle);
+	}
+	else
+	{
+		m_green(OFF);
+		m_red(ON);
+	}
+}
+
+/* PID Control */
+void run_control_loop(void)
+{
+	int error = SETPOINT - angle;
+	integral += error*TIMESTEP;
+	float derivative = (error - previous_error)/TIMESTEP;
+	float output = Kp*error+Ki*integral+Kd*derivative;
+	previous_error = error;
+	
+	duty_cycle = abs(output)/(45.0*Kp);
+	
+	if (output<0){set(PORTC,6);}
+	else{clear(PORTC,6);}
 }
 
 /* Print Functions for Funzies */

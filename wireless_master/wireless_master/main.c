@@ -38,7 +38,7 @@ Definitions
 
 #define CHANNEL 7
 #define TXADDRESS 0x7C
-#define PACKET_LENGTH 6
+#define PACKET_LENGTH 3
 
 /************************************************************
 Prototype Functions
@@ -55,14 +55,14 @@ Global Variables
 ************************************************************/
 
 int state = 0; // Used to control ADC switching
-char buffer[PACKET_LENGTH] = {0,0,0,0,0,0}; // Wifi output
-int Kp = 0; // Proportional Gain
-int Ki = 0; // Integral Gain
-int Kd = 0; // Derivative Gain
+char buffer[PACKET_LENGTH] = {0,0,0}; // Wifi output
+char Kp = 0; // Proportional Gain
+char Ki = 0; // Integral Gain
+char Kd = 0; // Derivative Gain
 
-int Kp_test = 0; // Proportional Gain
-int Ki_test = 0; // Integral Gain
-int Kd_test = 0; // Derivative Gain
+char Kp_test = 0; // Proportional Gain
+char Ki_test = 0; // Integral Gain
+char Kd_test = 0; // Derivative Gain
 int sum = 0;
 
 /************************************************************
@@ -86,7 +86,7 @@ int main(void)
     {
 		sum = Kd_test+Ki_test+Kp_test;
 		//sum = Kd+Ki+Kp;
-		if (Kp_test<1000)
+		if (Kp_test<600)
 		{
 			m_red(OFF);
 		}
@@ -160,7 +160,7 @@ void adc_switch(void)
 			clear(ADMUX,MUX2);
 			clear(ADMUX,MUX1);
 			set(ADMUX,MUX0);
-			Kp = ADC;
+			Kp = ADC/4;
 			break;
 		case 1:
 			state = 2;
@@ -168,7 +168,7 @@ void adc_switch(void)
 			clear(ADMUX,MUX2);
 			set(ADMUX,MUX1);
 			clear(ADMUX,MUX0);
-			Ki = ADC;
+			Ki = ADC/4;
 			break;
 		case 2:
 			state = 0;
@@ -176,7 +176,7 @@ void adc_switch(void)
 			clear(ADMUX,MUX2);
 			clear(ADMUX,MUX1);
 			clear(ADMUX,MUX0);
-			Kd = ADC;
+			Kd = ADC/4;
 			wireless_send();
 			break;
 	}
@@ -188,15 +188,15 @@ void adc_switch(void)
 /* Send Wireless Data */
 void wireless_send(void)
 {
-	buffer[0] = *&Kp;
-	buffer[2] = *&Ki;
-	buffer[4] = *&Kd;
+	buffer[0] = Kp;
+	buffer[1] = Ki;
+	buffer[2] = Kd;
 	//m_rf_send(TXADDRESS,buffer,PACKET_LENGTH); // Send RF Signal
 
 	
-	Kp_test = *(int*)&buffer[0];
-	Ki_test = *(int*)&buffer[2];
-	Kd_test = *(int*)&buffer[4];
+	Kp_test = buffer[0];
+	Ki_test = buffer[1];
+	Kd_test = buffer[2];
 	
 	m_usb_tx_string("Kp= ");
 	m_usb_tx_int(Kp_test);
