@@ -52,10 +52,10 @@ Definitions
 #define PWM_FREQ 400 
 
 /* PID Controller Values */
-#define SETPOINT 0
+#define SETPOINT 0.0
 #define Kp 1.0
-#define Ki 1.0
-#define Kd 1.0
+#define Ki 0.0
+#define Kd 0.0
 
 /* Wireless Communication Values */
 #define CHANNEL 7
@@ -125,7 +125,7 @@ int main(void)
 
 	/* Initializations */
 	init();
-	//usb_enable();
+	usb_enable();
 	wireless_enable();
 	timer1_init();
 	timer3_init();
@@ -169,7 +169,7 @@ void init(void){
 void usb_enable(void)
 {
 	m_usb_init();
-	while(!m_usb_isconnected());
+	//while(!m_usb_isconnected());
 }
 
 /* Initialize the Wireless System */
@@ -180,7 +180,7 @@ void wireless_enable(void)
 	m_rf_open(CHANNEL,RXADDRESS,PACKET_LENGTH); // Configure mRF
 }
 
-/* Recieve Wireless Data */
+/* Receive Wireless Data */
 void wireless_recieve(void)
 {
 	m_rf_read(buffer,PACKET_LENGTH); // Read RF Signal
@@ -231,7 +231,7 @@ void timer3_init(void)
 	clear(TCCR3A,WGM31);
 	clear(TCCR3A,WGM30);
 	
-	OCR3A = TIMESTEP*(CLOCK/TIM3_PRESCALE); // initalize OCR3A or duration
+	OCR3A = TIMESTEP*(CLOCK/TIM3_PRESCALE); // initialize OCR3A or duration
 }
 
 
@@ -264,12 +264,13 @@ void update_angle(void)
 		if (check(TIFR3,OCF3A)){	//check if timestep has completed
 			angleSlow = ((float)ax*RAD2DEG)/sqrt(((float)ax*ax+(float)az*az));
 			angleFast += gy*TIMESTEP;	//add thetadot*timestep to angle
-			angle = -angleSlow + angleFast;
+			angle = -1*(-angleSlow + angleFast);	//flip sign for IMU mounted upside down 
 			set(TIFR3,OCF3A);		//reset flag
 			run_control_loop(); // Update control
 		}
 		
 		print_angle(angle);
+
 	}
 	else
 	{
@@ -284,13 +285,18 @@ void run_control_loop(void)
 	int error = SETPOINT - angle;
 	integral += error*TIMESTEP;
 	float derivative = (error - previous_error)/TIMESTEP;
-	float output = (Kp_adjust/255.0)*Kp*error + (Ki_adjust/255.0)*Ki*integral + (Kd_adjust/255.0)*Kd*derivative;
+	//float output = (Kp_adjust/255.0)*Kp*error + (Ki_adjust/255.0)*Ki*integral + (Kd_adjust/255.0)*Kd*derivative;
+	float output = Kp*error + Ki*integral + Kd*derivative;
 	previous_error = error;
 	
 	duty_cycle = abs(output)/(45.0*Kp);
 	
 	if (output<0){set(PORTC,6);}
 	else{clear(PORTC,6);}
+		
+	m_usb_tx_string("\n control: ");
+	m_usb_tx_int((int) output);
+	
 }
 
 /* Print Functions for Funzies */
