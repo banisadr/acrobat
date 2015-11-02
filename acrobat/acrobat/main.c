@@ -49,13 +49,13 @@ Definitions
 #define GY_OFFSET -121
 
 /* Motor Driver Values */
-#define PWM_FREQ 400 
+#define PWM_FREQ 1000 
 
 /* PID Controller Values */
-#define SETPOINT 0.0
-#define Kp 1.0
+#define SETPOINT 0
+#define Kp 0.5
 #define Ki 0.0
-#define Kd 0.0
+#define Kd 0.01
 
 /* Wireless Communication Values */
 #define CHANNEL 7
@@ -126,7 +126,7 @@ int main(void)
 	/* Initializations */
 	init();
 	usb_enable();
-	wireless_enable();
+	//wireless_enable();
 	timer1_init();
 	timer3_init();
 
@@ -162,7 +162,8 @@ void init(void){
 	
 	while(!m_imu_init(accel_scale,gyro_scale)); //Initialize IMU
 	
-	sei(); // Enable global interrupts
+	
+	m_bus_init();
 }
 
 /* Setup USB */
@@ -285,17 +286,29 @@ void run_control_loop(void)
 	int error = SETPOINT - angle;
 	integral += error*TIMESTEP;
 	float derivative = (error - previous_error)/TIMESTEP;
+	//float derivative = -gy;
 	//float output = (Kp_adjust/255.0)*Kp*error + (Ki_adjust/255.0)*Ki*integral + (Kd_adjust/255.0)*Kd*derivative;
 	float output = Kp*error + Ki*integral + Kd*derivative;
 	previous_error = error;
 	
-	duty_cycle = abs(output)/(45.0*Kp);
+	duty_cycle = abs(output)/(45.0);
+	if (duty_cycle > 1) {
+		duty_cycle = 1;
+	}
 	
 	if (output<0){set(PORTC,6);}
 	else{clear(PORTC,6);}
 		
-	m_usb_tx_string("\n control: ");
-	m_usb_tx_int((int) output);
+	//m_usb_tx_string("\n control: ");
+	//m_usb_tx_int((int) output);
+	//m_usb_tx_string("     Kp= ");
+	//m_usb_tx_int(Kp_adjust);
+	//m_usb_tx_string("     Ki= ");
+	//m_usb_tx_int(Ki_adjust);
+	//m_usb_tx_string("     Kd= ");
+	//m_usb_tx_int(Kd_adjust);
+	//
+	print_axazgy();
 	
 }
 
