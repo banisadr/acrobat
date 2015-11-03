@@ -17,6 +17,7 @@ Header Information
 Modified by Bahram on 10/29/15 to create framework
 Modified by Pete on 10/30/15 to add angle output
 Modified by Bahram on 10/30/15 to integrate motor control
+Modified by All on 11/3/2015 - Fully functioning - tests passed
 ==================================================================
 *****************************************************************/
 
@@ -52,9 +53,9 @@ Definitions
 #define PWM_FREQ 1000 
 
 /* PID Controller Values */
-#define SETPOINT 0
-#define Kp 0.5
-#define Ki 0.0
+#define SETPOINT 1.0
+#define Kp 2.33
+#define Ki 0.01
 #define Kd 0.01
 
 /* Wireless Communication Values */
@@ -70,9 +71,6 @@ Prototype Functions
 ************************************************************/
 
 void init(void); //Setup I/O, clockspeed, IMU, Interrupts
-void print_axazgy(void); //Print values to usb
-void print_all(void); //Print all 6 IMU values
-void print_angle(int angle); //Print angle
 void usb_enable(void); //Setup USB
 void wireless_enable(void); // Initialize the wireless system
 void wireless_recieve(void); // Send data to slave
@@ -101,12 +99,12 @@ float duty_cycle = 0.4;
 
 /* Angle Stuff */
 int gy_previous_reading = 0;
-int angleFast = 0;
-int angleSlow;
-int angle=0;
+float angleFast = 0;
+float angleSlow;
+float angle = 0;
 
 /* PID Controler Values */
-int previous_error = 0;
+float previous_error = 0;
 float integral = 0.0;
 
 /* Wireless Communciation Values */
@@ -162,7 +160,6 @@ void init(void){
 	
 	while(!m_imu_init(accel_scale,gyro_scale)); //Initialize IMU
 	
-	
 	m_bus_init();
 }
 
@@ -188,16 +185,6 @@ void wireless_recieve(void)
 	Kp_adjust = buffer[0];
 	Ki_adjust = buffer[1];
 	Kd_adjust = buffer[2];
-	
-	/*	
-	m_usb_tx_string("Kp= ");
-	m_usb_tx_int(Kp);
-	m_usb_tx_string("     Ki= ");
-	m_usb_tx_int(Ki);
-	m_usb_tx_string("     Kd= ");
-	m_usb_tx_int(Kd);
-	m_usb_tx_string("\n");
-	*/
 }
 
 /* Timer1 Initialization for PWM Motor Control */
@@ -269,9 +256,6 @@ void update_angle(void)
 			set(TIFR3,OCF3A);		//reset flag
 			run_control_loop(); // Update control
 		}
-		
-		print_angle(angle);
-
 	}
 	else
 	{
@@ -283,11 +267,9 @@ void update_angle(void)
 /* PID Control */
 void run_control_loop(void)
 {
-	int error = SETPOINT - angle;
+	float error = SETPOINT - angle;
 	integral += error*TIMESTEP;
-	float derivative = (error - previous_error)/TIMESTEP;
-	//float derivative = -gy;
-	//float output = (Kp_adjust/255.0)*Kp*error + (Ki_adjust/255.0)*Ki*integral + (Kd_adjust/255.0)*Kd*derivative;
+	float derivative = -gy;
 	float output = Kp*error + Ki*integral + Kd*derivative;
 	previous_error = error;
 	
@@ -296,56 +278,14 @@ void run_control_loop(void)
 		duty_cycle = 1;
 	}
 	
+	OCR1B = (float)OCR1A*duty_cycle;
+	
 	if (output<0){set(PORTC,6);}
 	else{clear(PORTC,6);}
 		
-	//m_usb_tx_string("\n control: ");
-	//m_usb_tx_int((int) output);
-	//m_usb_tx_string("     Kp= ");
-	//m_usb_tx_int(Kp_adjust);
-	//m_usb_tx_string("     Ki= ");
-	//m_usb_tx_int(Ki_adjust);
-	//m_usb_tx_string("     Kd= ");
-	//m_usb_tx_int(Kd_adjust);
-	//
-	print_axazgy();
-	
-}
-
-/* Print Functions for Funzies */
-void print_axazgy(void) //Print values to usb
-{
-	m_usb_tx_string("ax= ");
-	m_usb_tx_int(ax);
-	m_usb_tx_string("     az=");
-	m_usb_tx_int(az);
-	m_usb_tx_string("     gy=");
-	m_usb_tx_long(gy);
-	m_usb_tx_string("\n");
-}
-
-void print_all(void)//Print all 6 IMU values
-{
-	m_usb_tx_string("ax= ");
-	m_usb_tx_int(data[0]);
-	m_usb_tx_string("     ay= ");
-	m_usb_tx_int(data[1]);
-	m_usb_tx_string("     az= ");
-	m_usb_tx_int(data[2]);
-	m_usb_tx_string("     gx= ");
-	m_usb_tx_int(data[3]);
-	m_usb_tx_string("     gy= ");
-	m_usb_tx_int(data[4]);
-	m_usb_tx_string("     gz= ");
-	m_usb_tx_int(data[5]);
-	m_usb_tx_string("\n");
-}
-
-void print_angle(int angle)//Print angle
-{
-	m_usb_tx_string("angle= ");
-	m_usb_tx_int(angle);
-	m_usb_tx_string("\n");
+	m_usb_tx_string("Duty Cycle= ");
+	m_usb_tx_int((int)(duty_cycle*1000));
+	m_usb_tx_string("\n");	
 }
 
 /************************************************************
